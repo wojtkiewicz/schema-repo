@@ -64,7 +64,7 @@ public abstract class BaseRESTRepository {
       if (old != null) {
         logger.error("Renderers {} and {} both use the same media type {}", r, old, r.getMediaType());
       }
-      supportedMediaTypes.add(new Variant(MediaType.valueOf(r.getMediaType()), null, null));
+      supportedMediaTypes.add(new Variant(MediaType.valueOf(r.getMediaType()), (String) null, null));
     }
     defaultMediaType = renderers.get(0).getMediaType();
     logger.info("Supported media types: {}", rendererByMediaType.keySet());

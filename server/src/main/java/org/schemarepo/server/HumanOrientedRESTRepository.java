@@ -21,12 +21,11 @@ package org.schemarepo.server;
 import java.util.Collections;
 import java.util.Properties;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
 import javax.ws.rs.Path;
 
 import org.schemarepo.Repository;
-
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
 
 /**
  * Subclass of {@link org.schemarepo.server.RESTRepository} which supports human-oriented rendering (HTML).

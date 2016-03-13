@@ -81,11 +81,6 @@
       <artifactId>schema-repo-server</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>org.schemarepo</groupId>
-      <artifactId>schema-repo-client</artifactId>
-      <version>${project.version}</version>
-    </dependency>
   </dependencies>
 
 </project>

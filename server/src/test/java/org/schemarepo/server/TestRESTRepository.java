@@ -18,8 +18,7 @@
 
 package org.schemarepo.server;
 
-import com.sun.jersey.api.NotFoundException;
-import com.sun.jersey.core.util.MultivaluedMapImpl;
+import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -28,6 +27,7 @@ import org.schemarepo.InMemoryRepository;
 import org.schemarepo.ValidatorFactory;
 import org.schemarepo.json.GsonJsonUtil;
 
+import javax.ws.rs.NotFoundException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
@@ -104,7 +104,7 @@ public class TestRESTRepository {
   @Test
   public void testInfluenceOfMediaTypeSuccess() {
     final String contentType = "Content-Type";
-    repo.createSubject("dummy", new MultivaluedMapImpl());
+    repo.createSubject("dummy", new MultivaluedStringMap());
     // null and all-inclusive (* or */*) mediaTypes result in the default configured renderer being used
     for (String mediaType: new String[] {null, "", "*/*", "text/plain", "text/html, image/gif, image/jpeg, *; q=.2, */*; q=.2"}) {
       Response response;
@@ -136,7 +136,7 @@ public class TestRESTRepository {
 
   @Test
   public void testSchemaGetsCreated() {
-    repo.createSubject("dummy", new MultivaluedMapImpl());
+    repo.createSubject("dummy", new MultivaluedStringMap());
     Response response = repo.addSchema("dummy", "schema");
     assertEquals(Status.OK.getStatusCode(), response.getStatus());
   }
@@ -148,7 +148,7 @@ public class TestRESTRepository {
 
   @Test
   public void testFailingValidationReportsErrors() {
-    MultivaluedMapImpl configParams = new MultivaluedMapImpl();
+    MultivaluedStringMap configParams = new MultivaluedStringMap();
     configParams.putSingle("repo.validators", "repo.reject");
     repo.createSubject("dummy", configParams);
 

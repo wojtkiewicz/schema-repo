@@ -20,13 +20,12 @@ package org.schemarepo.server;
 
 import java.util.Arrays;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
 import javax.ws.rs.Path;
 
 import org.schemarepo.Repository;
 import org.schemarepo.json.JsonUtil;
-
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
 
 /**
  * Subclass of {@link org.schemarepo.server.RESTRepository} which supports machine-oriented rendering

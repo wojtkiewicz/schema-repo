@@ -18,35 +18,22 @@
 
 package org.schemarepo.server;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.util.Properties;
-
-import javax.inject.Named;
-import javax.inject.Singleton;
-import javax.servlet.http.HttpServlet;
-
-import org.eclipse.jetty.server.Connector;
-import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
-import org.eclipse.jetty.servlet.FilterHolder;
-import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.util.component.AbstractLifeCycle;
-import org.eclipse.jetty.util.component.LifeCycle;
-import org.schemarepo.Repository;
+import org.glassfish.grizzly.http.server.HttpServer;
+import org.glassfish.hk2.api.ServiceLocator;
+import org.glassfish.hk2.utilities.ServiceLocatorUtilities;
+import org.glassfish.hk2.utilities.binding.AbstractBinder;
+import org.glassfish.jersey.grizzly2.httpserver.GrizzlyHttpServerFactory;
+import org.glassfish.jersey.server.ResourceConfig;
 import org.schemarepo.config.Config;
-import org.schemarepo.config.ConfigModule;
+import org.schemarepo.config.ConfigBinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.inject.Guice;
-import com.google.inject.Injector;
-import com.google.inject.Provides;
-import com.google.inject.servlet.GuiceFilter;
-import com.sun.jersey.guice.JerseyServletModule;
-import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
+import javax.ws.rs.core.UriBuilder;
+import java.io.IOException;
+import java.net.URI;
+import java.util.Properties;
+import java.util.UUID;
 
 /**
  * A {@link RepositoryServer} is a stand-alone server for running a
@@ -56,7 +43,7 @@ import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
  *
  */
 public class RepositoryServer {
-  private final Server server;
+  private final HttpServer server;
 
   /**
    * Constructs an instance of this class, overlaying the default properties
@@ -71,7 +58,7 @@ public class RepositoryServer {
    *          values will be used.</i></b>
    *
    */
-  public RepositoryServer(Properties props) {
+  public RepositoryServer(Properties props) throws IOException {
     final Logger logger = LoggerFactory.getLogger(getClass());
     final String julToSlf4jDep = "jul-to-slf4j dependency";
     final String julPropName = Config.LOGGING_ROUTE_JUL_TO_SLF4J;
@@ -94,131 +81,43 @@ public class RepositoryServer {
           julPropName, julToSlf4jDep);
     }
 
-    Injector injector = Guice.createInjector(new ConfigModule(props), new ServerModule());
-    this.server = injector.getInstance(Server.class);
+    String name = "schema-repo-" + UUID.randomUUID().toString();
+
+    ServiceLocator locator = ServiceLocatorUtilities.bind(name, new ConfigBinder(props), new ServerBinder());
+
+    URI baseUri = UriBuilder.fromUri("http://localhost/").port(8888).build();
+    ResourceConfig config = new ServerResourceConfig();
+    this.server = GrizzlyHttpServerFactory.createHttpServer(baseUri, config, locator);
   }
 
   public static void main(String... args) throws Exception {
-    if (args.length != 1) {
-      printHelp();
-      System.exit(1);
-    }
-    File config = new File(args[0]);
-    if (!config.canRead()) {
-      System.err.println("Cannot read file: " + config);
-      printHelp();
-      System.exit(1);
-    }
     Properties props = new Properties();
-    props.load(new BufferedInputStream(new FileInputStream(config)));
     RepositoryServer server = new RepositoryServer(props);
-    try {
-      server.start();
-      server.join();
-    } finally {
-      server.stop();
-    }
+    server.start();
+    Thread.currentThread().join();
   }
 
   public void start() throws Exception {
     server.start();
   }
 
-  public void join() throws InterruptedException {
-    server.join();
-  }
-
   public void stop() throws Exception {
     server.stop();
   }
 
-  private static void printHelp() {
-    System.err.println("One argument expected containing a configuration "
-        + "properties file.  Default properties are:");
-    ConfigModule.printDefaults(System.err);
-  }
-
-  /**
-   * Takes care of calling close() on the repo implementation.
-   *
-   * These hooks will not get called if stopAtShutdown is set to false, which can be set
-   * via the Config.JETTY_STOP_AT_SHUTDOWN property.
-   */
-  private static class ShutDownListener extends AbstractLifeCycle.AbstractLifeCycleListener {
-    private final Logger logger = LoggerFactory.getLogger(getClass());
-    private final Repository repo;
-    private final Integer gracefulShutdown;
-    ShutDownListener(Repository repo, Integer gracefulShutdown) {
-      this.repo = repo;
-      this.gracefulShutdown = gracefulShutdown;
-    }
-
+  static class ServerBinder extends AbstractBinder {
     @Override
-    public void lifeCycleStopped(LifeCycle event) {
-      logger.info("Waited {} ms to drain requests before closing the repo and exiting. " +
-              "This wait time can be adjusted with the {} config property.",
-              gracefulShutdown, Config.JETTY_GRACEFUL_SHUTDOWN);
-
-      try {
-        repo.close();
-        logger.info("Successfully closed the repo.");
-      } catch (IOException e) {
-        logger.warn("Failed to properly close repo", e);
-      }
-    }
-  }
-
-  private static class ServerModule extends JerseyServletModule {
-
-    @Override
-    protected void configureServlets() {
-      bind(Connector.class).to(SelectChannelConnector.class);
-      serve("/*").with(GuiceContainer.class);
+    protected void configure() {
       bind(MachineOrientedRESTRepository.class);
       bind(HumanOrientedRESTRepository.class);
       bind(AuxiliaryRESTRepository.class);
     }
-
-    @Provides
-    @Singleton
-    public Server provideServer(
-        @Named(Config.JETTY_HOST) String host,
-        @Named(Config.JETTY_PORT) Integer port,
-        @Named(Config.JETTY_HEADER_SIZE) Integer headerSize,
-        @Named(Config.JETTY_BUFFER_SIZE) Integer bufferSize,
-        @Named(Config.JETTY_STOP_AT_SHUTDOWN) Boolean stopAtShutdown,
-        @Named(Config.JETTY_GRACEFUL_SHUTDOWN) Integer gracefulShutdown,
-        Repository repo,
-        Connector connector,
-        GuiceFilter guiceFilter,
-        ServletContextHandler handler) {
-
-      Server server = new Server();
-      if (null != host && !host.isEmpty()) {
-        connector.setHost(host);
-      }
-      connector.setPort(port);
-      connector.setRequestHeaderSize(headerSize);
-      connector.setRequestBufferSize(bufferSize);
-      server.setConnectors(new Connector[] { connector });
-
-      // the guice filter intercepts all inbound requests and uses its bindings
-      // for servlets
-      FilterHolder holder = new FilterHolder(guiceFilter);
-      handler.addFilter(holder, "/*", null);
-      handler.addServlet(NoneServlet.class, "/");
-      handler.setContextPath("/");
-      handler.addLifeCycleListener(new ShutDownListener(repo, gracefulShutdown));
-      server.setHandler(handler);
-      server.dumpStdErr();
-      server.setStopAtShutdown(stopAtShutdown);
-      server.setGracefulShutdown(gracefulShutdown);
-      return server;
-    }
-
-    private static final class NoneServlet extends HttpServlet {
-      private static final long serialVersionUID = 4560115319373180139L;
-    }
   }
 
+  static class ServerResourceConfig extends ResourceConfig {
+    public ServerResourceConfig() {
+      packages("org.schemarepo.server");
+    }
+  }
 }
+
